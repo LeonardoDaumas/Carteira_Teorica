@@ -560,19 +560,21 @@ def atualizar_historico_pl():
     data_inicial = historico_pl_df.loc[0, 'Data']
     hoje = str(datetime.now().strftime('%Y-%m-%d'))  # dia de hoje
 
+    #resolve o problema dos dias que não entram na tabela, ex: sábado, domingo e feriados
+    indice_datas = pd.date_range('2022-05-10', hoje)
 
     # passa a cotação do dia para o histórico PL
+    
     for columns in historico_pl_df:
         if columns != 'Data' and columns != 'Saldo em caixa' and columns != 'PL' and columns != 'Cota':
             df_cotacao_yahoo = web.DataReader(
                 columns, data_source='yahoo', start='2022-05-10', end=hoje)
+            df_cotacao_yahoo = df_cotacao_yahoo.reindex(indice_datas)
             # transforma a data, que era índice, em coluna
             df_cotacao_yahoo = df_cotacao_yahoo.reset_index(level=0)
             df_cotacao_yahoo["Date"] = pd.to_datetime(
-                df_cotacao_yahoo["Date"], dayfirst=True).dt.strftime('%Y-%m-%d')
-            if hoje not in df_cotacao_yahoo['Date']:
-                df_cotacao_yahoo.loc[-1,'Date'] = hoje
-                df_cotacao_yahoo = df_cotacao_yahoo.ffill()
+                df_cotacao_yahoo["index"], dayfirst=True).dt.strftime('%Y-%m-%d')
+            df_cotacao_yahoo = df_cotacao_yahoo.ffill()
             # passa a cotação do yahoo para o histórico do PL
             for index, row in df_cotacao_yahoo.iterrows():
                 for index2, row2 in historico_pl_df.iterrows():
