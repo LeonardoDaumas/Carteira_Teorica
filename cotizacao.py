@@ -9,6 +9,7 @@ def criar_posicao():
     carteira_df = pd.read_excel('carteira.xlsx')
     historico_qtd_df = pd.read_excel('historico_qtd.xlsx')
     historico_pl_df = pd.read_excel('historico_pl.xlsx')
+    historico_long_short_df = pd.read_excel('historico_long_short.xlsx')
 
     # dataframe temporário para receber cada ordem e depois mandar todos para o arquivo ordens.xlsx
     ordem_temporaria_df = pd.DataFrame(columns=[
@@ -62,9 +63,9 @@ def criar_posicao():
             while operacao != 'LONG' and operacao != 'SHORT':
                 operacao = input(
                     'Erro! Digite corretamente [long/short]: ').upper()
-            while operacao == 'SHORT':
-                operacao = input(
-                    'Atualmente a operação SHORT está indisponível. Digite "long":').upper()
+            # while operacao == 'SHORT':
+            #     operacao = input(
+            #         'Atualmente a operação SHORT está indisponível. Digite "long":').upper()
 
             # cria um dicionário com as informações da compra, depois passa para o dataframe temporário e então zera o dicionário para receber novos números
             ordem_temp_df = pd.DataFrame([{'Código': ticker, 'Preço Inicial': preco, 'Quantidade': qtd_ativo, 'Valor Total Inicial': qtd_total,
@@ -79,10 +80,16 @@ def criar_posicao():
             historico_qtd_df.loc[:, f'{ticker}'] = 0
         if ticker not in historico_pl_df.columns:
             historico_pl_df.loc[:, f'{ticker}'] = 0
+        if ticker not in historico_long_short_df.columns:
+            historico_long_short_df.loc[:, f'{ticker}'] = 0
 
         for index, linha in historico_qtd_df.iterrows():
             if linha['Data'] == hoje_br:
                 historico_qtd_df.at[index, f'{ticker}'] = qtd_ativo
+
+        for index, linha in historico_long_short_df.iterrows():
+            if linha['Data'] == hoje_br:
+                historico_long_short_df.at[index, f'{ticker}'] = operacao
 
     # atualiza o saldo em caixa no histórico PL
     for index, linha in historico_pl_df.iterrows():
@@ -111,6 +118,7 @@ def criar_posicao():
             carteira_df.to_excel('carteira.xlsx', index=False)
             historico_qtd_df.to_excel('historico_qtd.xlsx', index=False)
             historico_pl_df.to_excel('historico_pl.xlsx', index=False)
+            historico_long_short_df.to_excel('historico_long_short.xlsx', index=False)
             break
         if salvar == 'n':
             print('A ordem não foi salva.')
@@ -241,6 +249,7 @@ def zerar_posicao():
     carteira_df = pd.read_excel('carteira.xlsx')
     historico_qtd_df = pd.read_excel('historico_qtd.xlsx')
     historico_pl_df = pd.read_excel('historico_pl.xlsx')
+    historico_long_short_df = pd.read_excel('historico_long_short.xlsx')
 
     # dia de hoje, formato brasileiro
     hoje_br = str(datetime.now().strftime('%d/%m/%Y'))
@@ -283,27 +292,45 @@ def zerar_posicao():
                     if confirmar == 'n':
                         print('Cancelando ação...')
                         break
+                                   
                     elif confirmar == 's':
-                        retorno_ao_caixa = carteira_df.iloc[ativo, 6]
+
+                        # caso seja LONG
+                        if carteira_df.loc[ativo, 'Operação'] == 'LONG':
+                            retorno_ao_caixa = carteira_df.iloc[ativo, 6]
+                        
+                        # caso seja SHORT
+                        elif carteira_df.loc[ativo, 'Operação'] == 'SHORT':
+                            # pega o valor inicial e soma ao lucro/prejuízo para retornar o montante ao saldo em caixa
+                            retorno_ao_caixa = carteira_df.iloc[ativo, 5] + (carteira_df.iloc[ativo, 5] - carteira_df.iloc[ativo, 6])
+                        
                         # retorna o valor do ativo zerado ao caixa.
                         carteira_df.at[0,
-                                       'Valor Total Atual'] += retorno_ao_caixa
+                                    'Valor Total Atual'] += retorno_ao_caixa
                         # modifica o saldo em caixa no histórico PL
                         for index, linha in historico_pl_df.iterrows():
                             if linha['Data'] == hoje_br:
                                 historico_pl_df.at[index,
-                                                   'Saldo em caixa'] += retorno_ao_caixa
+                                                'Saldo em caixa'] += retorno_ao_caixa
                         # zera a quantidade da cota no histórico
                         for index, linha in historico_qtd_df.iterrows():
                             if linha['Data'] == hoje_br:
                                 historico_qtd_df.at[index,
                                                     f'{ticker}'] -= carteira_df.loc[ativo, 'Quantidade']
+
+                        # transforma a operação em NONE para representar que não há posição nesse dia
+                        for index, linha in historico_long_short_df.iterrows():
+                            if linha['Data'] == hoje_br:
+                                historico_long_short_df.at[index,
+                                                    f'{ticker}'] = 'NONE'
                         # e exclui o ativo da carteira
                         carteira_df = carteira_df.drop(ativo, axis=0).reset_index(
                             drop=True)
                         print(
                             'O ativo foi retirado da carteira e o dinheiro retornou ao caixa.')
                         break
+
+
 
     print('-'*85)
     print('Sua carteira ficará assim:')
@@ -318,6 +345,7 @@ def zerar_posicao():
         if salvar == 's':
             historico_qtd_df.to_excel('historico_qtd.xlsx', index=False)
             historico_pl_df.to_excel('historico_pl.xlsx', index=False)
+            historico_long_short_df.to_excel('historico_long_short.xlsx', index=False)
             carteira_df.to_excel('carteira.xlsx', index=False)
             break
         if salvar == 'n':
@@ -485,6 +513,7 @@ def atualizar_datas():
     # cria uma nova linha com a data do dia atual nos arquivos de histórico, caso não exista ainda
     historico_qtd_df = pd.read_excel('historico_qtd.xlsx')
     historico_pl_df = pd.read_excel('historico_pl.xlsx')
+    historico_long_short_df = pd.read_excel('historico_long_short.xlsx') 
     hoje_br = str(datetime.now().strftime('%d/%m/%Y'))
     nova_data = pd.DataFrame([{'Data': f'{hoje_br}'}])
 
@@ -494,9 +523,13 @@ def atualizar_datas():
     if hoje_br not in historico_pl_df['Data'].values:
         historico_pl_df = pd.concat(
             [historico_pl_df, nova_data], ignore_index=True)
+    if hoje_br not in historico_long_short_df['Data'].values:
+        historico_long_short_df = pd.concat(
+            [historico_long_short_df, nova_data], ignore_index=True)
 
     historico_qtd_df.to_excel('historico_qtd.xlsx', index=False)
     historico_pl_df.to_excel('historico_pl.xlsx', index=False)
+    historico_long_short_df.to_excel('historico_long_short.xlsx', index=False)
 
 
 # Cria as datas que faltam nos arquivos de histórico
@@ -504,6 +537,7 @@ def atualizar_historico_datas():
     carteira_df = pd.read_excel('carteira.xlsx')
     historico_qtd_df = pd.read_excel('historico_qtd.xlsx')
     historico_pl_df = pd.read_excel('historico_pl.xlsx')
+    historico_long_short_df = pd.read_excel('historico_long_short.xlsx')
 
     # dia de hoje, formato brasileiro
     hoje_br = str(datetime.now().strftime('%d/%m/%Y'))
@@ -514,6 +548,9 @@ def atualizar_historico_datas():
 
     historico_qtd_df["Data"] = pd.to_datetime(
         historico_qtd_df["Data"], dayfirst=True).dt.strftime('%Y-%m-%d')
+
+    historico_long_short_df["Data"] = pd.to_datetime(
+        historico_long_short_df["Data"], dayfirst=True).dt.strftime('%Y-%m-%d')
 
     # cria um dataframe para preencher datas entre os intervalos do histórico
     cota_atualizado_df = historico_qtd_df.set_index(
@@ -526,6 +563,11 @@ def atualizar_historico_datas():
     pl_atualizado_df["Data"] = pd.to_datetime(
         pl_atualizado_df["Data"], dayfirst=True).dt.strftime('%Y-%m-%d')
 
+    long_short_atualizado_df = historico_long_short_df.set_index(
+        'Data').asfreq('D').reset_index()
+    long_short_atualizado_df["Data"] = pd.to_datetime(
+        long_short_atualizado_df["Data"], dayfirst=True).dt.strftime('%Y-%m-%d')
+
     # percorre os dataframes pra juntar as informações antigas na lista nova
     for index, row in cota_atualizado_df.iterrows():
         for index2, row2 in historico_qtd_df.iterrows():
@@ -537,9 +579,15 @@ def atualizar_historico_datas():
             if pl_atualizado_df.loc[index, 'Data'] == historico_pl_df.loc[index2, 'Data']:
                 pl_atualizado_df.loc[index] = historico_pl_df.loc[index2]
 
+    for index, row in long_short_atualizado_df.iterrows():
+        for index2, row2 in historico_long_short_df.iterrows():
+            if long_short_atualizado_df.loc[index, 'Data'] == historico_long_short_df.loc[index2, 'Data']:
+                long_short_atualizado_df.loc[index] = historico_long_short_df.loc[index2]
+
     # preenche a tabela com os números do dia anterior
     pl_atualizado_df = pl_atualizado_df.ffill()
     cota_atualizado_df = cota_atualizado_df.ffill()
+    long_short_atualizado_df = long_short_atualizado_df.ffill()
 
     pl_atualizado_df["Data"] = pd.to_datetime(
         pl_atualizado_df["Data"], dayfirst=False).dt.strftime('%Y-%m-%d')
@@ -547,8 +595,12 @@ def atualizar_historico_datas():
     cota_atualizado_df["Data"] = pd.to_datetime(
         cota_atualizado_df["Data"], dayfirst=False).dt.strftime('%Y-%m-%d')
 
+    long_short_atualizado_df["Data"] = pd.to_datetime(
+        long_short_atualizado_df["Data"], dayfirst=False).dt.strftime('%Y-%m-%d')
+
     cota_atualizado_df.to_excel('historico_qtd.xlsx', index=False)
     pl_atualizado_df.to_excel('historico_pl.xlsx', index=False)
+    long_short_atualizado_df.to_excel('historico_long_short.xlsx', index=False)
 
 
 # Atualiza os históricos das cotações do PL, multiplica e calcula o PL
@@ -556,6 +608,7 @@ def atualizar_historico_pl():
     carteira_df = pd.read_excel('carteira.xlsx')
     historico_qtd_df = pd.read_excel('historico_qtd.xlsx')
     historico_pl_df = pd.read_excel('historico_pl.xlsx')
+    historico_long_short_df = pd.read_excel('historico_long_short.xlsx')
 
     data_inicial = historico_pl_df.loc[0, 'Data']
     hoje = str(datetime.now().strftime('%Y-%m-%d'))  # dia de hoje
@@ -606,11 +659,15 @@ def atualizar_historico_pl():
     # transforma os 0 em NaN e preenche com os valores anteriores
     historico_pl_df = historico_pl_df.replace(0, np.nan).ffill()
     historico_pl_df = historico_pl_df.replace(np.nan, 0)
+    historico_long_short_df = historico_long_short_df.replace(0, 'NONE')
 
     historico_pl_df["Data"] = pd.to_datetime(
         historico_pl_df["Data"], dayfirst=True).dt.strftime('%d/%m/%Y')
     historico_qtd_df["Data"] = pd.to_datetime(
         historico_qtd_df["Data"], dayfirst=True).dt.strftime('%d/%m/%Y')
+    historico_long_short_df["Data"] = pd.to_datetime(
+        historico_long_short_df["Data"], dayfirst=True).dt.strftime('%d/%m/%Y')
 
     historico_pl_df.to_excel('historico_pl.xlsx', index=False)
     historico_qtd_df.to_excel('historico_qtd.xlsx', index=False)
+    historico_long_short_df.to_excel('historico_long_short.xlsx', index=False)
